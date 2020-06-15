@@ -8,7 +8,6 @@ import java.util.concurrent.TimeUnit;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.RecordState;
-import aqua.blatt1.common.Reference;
 import aqua.blatt1.common.msgtypes.*;
 
 import static aqua.blatt1.common.RecordState.*;
@@ -43,9 +42,15 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		this.forwarder = forwarder;
 	}
 
-	synchronized void onRegistration(String id) {
+	synchronized void onRegistration(String id, int durationLease) {
 		this.id = id;
 		newFish(WIDTH - FishModel.getXSize(), rand.nextInt(HEIGHT - FishModel.getYSize()));
+		timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				forwarder.register();
+			}
+		}, durationLease - 1000);
 	}
 
 	public synchronized void newFish(int x, int y) {
@@ -278,6 +283,11 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 	public void updateCurrentFishAddress(String fishId, InetSocketAddress currentAddress) {
 		homeAgent.replace(fishId, currentAddress);
+	}
+
+	public void handleDeregister() {
+		forwarder.deregister(id);
+		System.exit(0);
 	}
 
 	protected void run() {

@@ -8,6 +8,9 @@ import messaging.Endpoint;
 import messaging.Message;
 
 import java.net.InetSocketAddress;
+import java.sql.Timestamp;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -19,6 +22,7 @@ public class Broker {
     private volatile boolean stopRequested;
     private ReadWriteLock lock;
     private int counter;
+    private Timer timer = new Timer();
 
     public Broker() {
         this.endpoint = new Endpoint(Properties.PORT);
@@ -45,8 +49,8 @@ public class Broker {
             }
 
             if (msg.getPayload() instanceof DeregisterRequest) {
-                InetSocketAddress client = msg.getSender();
-                deregister(client);
+                String clientId = ((DeregisterRequest) msg.getPayload()).getId();
+                deregister(clientId);
             }
 
             /* Changed in Übungsblatt 3 Aufgabe 1
@@ -81,6 +85,13 @@ public class Broker {
             stopRequested = true;
         });
         */
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                checkForOldClients();
+            }
+        }, 0, Properties.CHECK_OLD_CLIENTS);
+
         while (!stopRequested) {
             Message msg = endpoint.blockingReceive();
             executor.execute(new BrokerTask(msg));
@@ -88,10 +99,27 @@ public class Broker {
         executor.shutdown();
     }
 
+    private void checkForOldClients() {
+        for (int i = 0; i < clientCollection.size(); i++) {
+            Timestamp registeredOn = clientCollection.getRegisteredOn(i);
+            if (System.currentTimeMillis() - Properties.LEASE_DURATION > registeredOn.getTime()) {
+                endpoint.send((InetSocketAddress) clientCollection.getClient(i), new DeregisterForced());
+            }
+        }
+    }
+
     private RegisterResponse register(InetSocketAddress newClient) {
+        if (clientCollection.indexOf(newClient) < 0) {
+            return registerNewClient(newClient);
+        } else {
+            return registerUpdateClient(newClient);
+        }
+    }
+
+    private RegisterResponse registerNewClient(InetSocketAddress newClient) {
         lock.writeLock().lock();
         String newClientId = getClientIdForRegistering();
-        clientCollection.add(newClientId, newClient);
+        clientCollection.add(newClientId, newClient, new Timestamp(System.currentTimeMillis()));
 
         int newClientIndex = clientCollection.indexOf(newClient);
         InetSocketAddress leftNeighbor = (InetSocketAddress) clientCollection.getLeftNeighorOf(newClientIndex);
@@ -107,7 +135,14 @@ public class Broker {
         }
 
         lock.writeLock().unlock();
-        return new RegisterResponse(newClientId);
+        return new RegisterResponse(newClientId, Properties.LEASE_DURATION);
+    }
+
+    private RegisterResponse registerUpdateClient(InetSocketAddress newClient) {
+        int clientIndex = clientCollection.indexOf(newClient);
+        clientCollection.update(clientIndex, new Timestamp(System.currentTimeMillis()));
+        String clientId = clientCollection.getId(clientCollection.indexOf(newClient));
+        return new RegisterResponse(clientId, Properties.LEASE_DURATION);
     }
 
     private String getClientIdForRegistering() {
@@ -116,7 +151,7 @@ public class Broker {
         return newClientName;
     }
 
-    private void deregister(InetSocketAddress clientToBeRemoved) {
+    private void deregister(String clientToBeRemoved) {
         lock.writeLock().lock();
         int clientToBeRemovedIndex = clientCollection.indexOf(clientToBeRemoved);
         InetSocketAddress leftNeighbor = (InetSocketAddress) clientCollection.getLeftNeighorOf(clientToBeRemovedIndex);

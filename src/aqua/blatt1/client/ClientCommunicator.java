@@ -78,7 +78,7 @@ public class ClientCommunicator {
 				Message msg = endpoint.blockingReceive();
 
 				if (msg.getPayload() instanceof RegisterResponse)
-					tankModel.onRegistration(((RegisterResponse) msg.getPayload()).getId());
+					tankModel.onRegistration(((RegisterResponse) msg.getPayload()).getId(), ((RegisterResponse) msg.getPayload()).getDurationLease());
 
 				if (msg.getPayload() instanceof HandoffRequest)
 					tankModel.receiveFish(((HandoffRequest) msg.getPayload()).getFish());
@@ -113,6 +113,10 @@ public class ClientCommunicator {
 
 				if (msg.getPayload() instanceof LocationUpdate) {
 					tankModel.updateCurrentFishAddress(((LocationUpdate) msg.getPayload()).getFishId(), ((LocationUpdate) msg.getPayload()).getNewFishAddress());
+				}
+
+				if (msg.getPayload() instanceof DeregisterForced) {
+					tankModel.handleDeregister();
 				}
 			}
 			System.out.println("Receiver stopped.");
