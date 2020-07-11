@@ -1,13 +1,16 @@
 package aqua.blatt1.broker;
 
-import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.Properties;
 import aqua.blatt1.common.msgtypes.*;
 import aqua.blatt2.broker.PoisonPill;
 import messaging.Endpoint;
 import messaging.Message;
 
+import javax.crypto.NoSuchPaddingException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -24,7 +27,7 @@ public class Broker {
     private int counter;
     private Timer timer = new Timer();
 
-    public Broker() {
+    public Broker() throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, SocketException {
         this.endpoint = new Endpoint(Properties.PORT);
         this.clientCollection = new ClientCollection();
         this.stopRequested = false;
@@ -72,7 +75,7 @@ public class Broker {
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, SocketException {
         Broker broker = new Broker();
         broker.broker();
     }
